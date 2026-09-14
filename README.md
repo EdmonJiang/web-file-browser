@@ -247,10 +247,8 @@ Recommendations / 建议:
 
 | Symptom / 现象 | Cause & fix / 原因与解决 |
 | --- | --- |
-| Login dialog not shown / 看不到登录框 | Clear site data, then reload / 清除站点数据后重新加载 |
 | `密码错误` on every request / 每次请求都提示密码错误 | Cached password is stale — clear site data / 缓存的密码已失效，请清除站点数据 |
 | `路径越界` / path out of range | Requested path is outside `WEB_FILE_BROWSER_ROOT` / 请求路径超出了配置的根目录 |
-| Upload silently fails / 上传无反应 | Fixed in current version (uses `FormData`); hard-refresh with Ctrl+F5 / 已修复（改用 `FormData`），请用 Ctrl+F5 强制刷新 |
 | Port already in use / 端口被占用 | Change `WEB_FILE_BROWSER_PORT` or stop the other process / 修改端口或停止占用进程 |
 
 ---
