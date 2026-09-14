@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web 文件浏览器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f3f3f3;--bg2:#fff;--sidebar-bg:#f8f8f8;--text:#1a1a1a;--text2:#666;--accent:#0078d4;--accent-hover:#005a9e;--border:#e0e0e0;--hover:#e8e8e8;--selected:#c8e2ff;--success:#107c10;--error:#d83b0c}
+body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal-overlay.hidden{display:none}
+.modal{background:var(--bg2);border-radius:8px;padding:40px;box-shadow:0 8px 32px rgba(0,0,0,.2);text-align:center;min-width:320px}
+.modal h2{margin-bottom:20px;color:var(--accent)}
+.modal input{width:100%;padding:12px;border:2px solid var(--border);border-radius:4px;font-size:16px;margin-bottom:16px;outline:none}
+.modal input:focus{border-color:var(--accent)}
+.modal button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:4px;font-size:16px;cursor:pointer}
+.modal button:hover{background:var(--accent-hover)}
+.modal .error{color:var(--error);margin-top:12px;font-size:14px}
+.drop-zone{position:fixed;top:0;left:0;right:0;bottom:0;border:3px dashed var(--accent);background:rgba(200,230,255,.9);display:flex;align-items:center;justify-content:center;z-index:500;opacity:0;pointer-events:none;transition:opacity .2s}
+.drop-zone.active{opacity:1;pointer-events:auto}
+.drop-zone-text{font-size:28px;color:var(--accent);font-weight:600}
+.context-menu{position:fixed;background:var(--bg2);border:1px solid var(--border);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:600;min-width:160px}
+.context-menu.hidden{display:none}
+.context-menu-item{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:13px}
+.context-menu-item:hover{background:var(--hover)}
+.context-menu-sep{height:1px;background:var(--border);margin:4px 0}
+.notification{position:fixed;top:20px;right:20px;background:var(--bg2);border-radius:4px;padding:16px 24px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:700;font-size:14px;max-width:400px;border-left:4px solid var(--success)}
+.notification.error{border-left-color:var(--error)}
+.notification.hidden{display:none}
+.topbar{display:flex;align-items:center;background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 16px;gap:8px}
+.breadcrumb{display:flex;align-items:center;flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 12px;height:36px;overflow-x:auto}
+.breadcrumb-item{cursor:pointer;padding:2px 8px;color:var(--text2);font-size:14px;white-space:nowrap}
+.breadcrumb-item:hover{color:var(--accent)}
+.breadcrumb-sep{color:var(--text2);padding:0 4px}
+.breadcrumb-item.active{color:var(--text);font-weight:500}
+.search-box{display:flex;align-items:center;gap:8px}
+.search-box input{padding:6px 12px;border:1px solid var(--border);border-radius:4px;font-size:14px;width:200px;outline:none}
+.search-box input:focus{border-color:var(--accent)}
+.toolbar{display:flex;align-items:center;gap:4px;padding:8px 16px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.toolbar button{display:flex;align-items:center;gap:6px;padding:6px 12px;background:transparent;border:1px solid transparent;border-radius:4px;cursor:pointer;font-size:13px;color:var(--text2)}
+.toolbar button:hover{background:var(--hover);color:var(--text)}
+.toolbar button:disabled{opacity:.5;cursor:not-allowed}
+.toolbar .sep{width:1px;height:24px;background:var(--border);margin:0 8px}
+.main{display:flex;flex:1;overflow:hidden}
+.sidebar{width:220px;background:var(--sidebar-bg);border-right:1px solid var(--border);overflow-y:auto;padding:8px 0}
+.sidebar-section{margin-bottom:12px}
+.sidebar-section-title{padding:4px 16px;font-size:12px;color:var(--text2);text-transform:uppercase}
+.sidebar-item{display:flex;align-items:center;gap:8px;padding:6px 16px;cursor:pointer;font-size:14px;color:var(--text)}
+.sidebar-item:hover{background:var(--hover)}
+.sidebar-item.active{background:var(--selected)}
+.file-list{flex:1;overflow-y:auto;padding:8px}
+.file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+.file-item{display:flex;flex-direction:column;align-items:center;padding:12px 8px;border:1px solid transparent;border-radius:4px;cursor:pointer;text-align:center;transition:all .15s}
+.file-item:hover{background:var(--hover)}
+.file-item.selected{background:var(--selected);border-color:var(--accent)}
+.file-item .icon{font-size:40px;margin-bottom:8px}
+.file-item .name{font-size:12px;word-break:break-word;max-width:100%}
+.file-item .size{font-size:11px;color:var(--text2);margin-top:4px}
+.file-list-view{display:flex;flex-direction:column;gap:2px}
+.file-list-item{display:flex;align-items:center;padding:4px 8px;border-radius:2px;cursor:pointer;font-size:13px;gap:12px}
+.file-list-item:hover{background:var(--hover)}
+.file-list-item.selected{background:var(--selected)}
+.file-list-item .icon{font-size:18px;width:24px;text-align:center}
+.file-list-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-list-item .size{color:var(--text2);min-width:80px;text-align:right}
+.file-list-item .modified{color:var(--text2);min-width:160px}
+.list-header{display:flex;padding:4px 8px;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);margin-bottom:4px}
+.list-header span{flex:1}
+.list-header span:nth-child(2){min-width:80px;text-align:right}
+.list-header span:nth-child(3){min-width:160px}
+.statusbar{display:flex;align-items:center;justify-content:space-between;padding:4px 16px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;color:var(--text2)}
+.view-toggle{display:flex;gap:2px}
+.view-toggle button{padding:4px 8px;background:transparent;border:1px solid var(--border);border-radius:2px;cursor:pointer;font-size:12px}
+.view-toggle button.active{background:var(--accent);color:#fff}
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text2)}
+.spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:768px){.sidebar{display:none}.search-box input{width:120px}}
+</style>
+</head>
+<body>
+
+<div id="passwordModal" class="modal-overlay hidden">
+<div class="modal">
+<h2>🔐 Web 文件浏览器</h2>
+<p style="margin-bottom:16px;color:#666">请输入访问密码</p>
+<input type="password" id="passwordInput" placeholder="输入密码..." autofocus>
+<button onclick="checkPassword()">确认</button>
+<div id="passwordError" class="error"></div>
+</div>
+</div>
+
+<div id="dropZone" class="drop-zone"><div class="drop-zone-text">📁 拖拽文件到此处上传</div></div>
+<div id="contextMenu" class="context-menu hidden"></div>
+<div id="notification" class="notification hidden"></div>
+
+<div class="topbar">
+<div class="breadcrumb" id="breadcrumb"></div>
+<div class="search-box">
+<input type="text" id="searchInput" placeholder="🔍 搜索当前目录...">
+<button onclick="performSearch()">搜索</button>
+</div>
+</div>
+
+<div class="toolbar">
+<button onclick="goUp()" id="btnUp" title="返回上级目录">⬆ 上级</button>
+<button onclick="refreshCurrent()" title="刷新">🔄 刷新</button>
+<div class="sep"></div>
+<button onclick="newFolder()" title="新建文件夹">📁 新建文件夹</button>
+<button onclick="startUpload()" title="上传文件">📤 上传文件</button>
+<div class="sep"></div>
+<button onclick="copySelected()" title="复制">📋 复制</button>
+<button onclick="cutSelected()" title="剪切">✂️ 剪切</button>
+<button onclick="pasteSelected()" title="粘贴">📌 粘贴</button>
+<button onclick="renameSelected()" title="重命名">✏️ 重命名</button>
+<button onclick="deleteSelected()" title="删除">🗑️ 删除</button>
+<div class="sep"></div>
+<div class="view-toggle">
+<button id="gridBtn" onclick="setView('grid')" class="active">🔲 网格</button>
+<button id="listBtn" onclick="setView('list')">📃 列表</button>
+</div>
+</div>
+
+<div class="main">
+    <div class="file-list" id="fileList"></div>
+</div>
+
+<div class="statusbar">
+<span id="statusLeft">就绪</span>
+<span id="statusRight">密码: ********</span>
+</div>
+
+<input type="file" id="fileInput" multiple style="display:none" onchange="handleFileSelect(event)">
+
+<script>
+
+
+
+const API = '/api';
+
+let currentPath = '', selectedItems = [], viewMode = 'grid', clipboard = null, apiToken = '', currentFileData = null;
+
+
+
+function checkPassword() {
+
+    const pw = document.getElementById('passwordInput').value.trim();
+
+    console.log('Checking password...');
+
+    fetch(API + '/files?password=' + encodeURIComponent(pw), {method:'GET'})
+
+    .then(r => {
+
+        console.log('Response status:', r.status);
+
+        return r.json();
+
+    })
+
+    .then(data => {
+
+        if (data.error) {
+
+            document.getElementById('passwordError').textContent = '密码错误，请重试';
+
+            document.getElementById('passwordInput').value = '';
+
+            document.getElementById('passwordInput').focus();
+
+        } else {
+
+            apiToken = pw;
+
+            localStorage.setItem('webBrowserPassword', pw);
+
+            const modal = document.getElementById('passwordModal');
+
+            modal.classList.add('hidden');
+
+            modal.style.display = '';
+
+            const initialPath = localStorage.getItem('webBrowserPath') || '/data/myfolder';
+
+            loadPath(initialPath);
+
+            loadSidebar();
+
+            showNotification('登录成功', 'success');
+
+        }
+
+    })
+
+    .catch(e => {
+
+        console.error('Password check error:', e);
+
+        document.getElementById('passwordError').textContent = '网络错误: ' + e.message;
+
+    });
+
+}
+
+// Auto-fill password and load path if cached
+window.addEventListener('load', function() {
+
+    const pw = localStorage.getItem('webBrowserPassword');
+
+    if (pw) {
+
+        // Auto-authenticate without showing modal
+        apiToken = pw;
+
+        // Load path and files directly
+        const initialPath = localStorage.getItem('webBrowserPath') || '/data/myfolder';
+
+        loadPath(initialPath);
+
+        loadSidebar();
+
+    } else {
+
+        // No cached password: show the login modal
+        const modal = document.getElementById('passwordModal');
+
+        modal.classList.remove('hidden');
+
+        modal.style.display = '';
+
+        const input = document.getElementById('passwordInput');
+
+        input.value = '';
+
+        setTimeout(()=>input.focus(), 50);
+
+    }
+
+});
+
+document.getElementById('passwordInput').addEventListener('keyup', e => { if(e.key==='Enter') checkPassword(); });
+
+
+
+async function api(method, url, data=null) {
+
+    const headers = {'X-Password': apiToken};
+
+    const options = {method, headers};
+
+    if (data) {
+
+        if (data instanceof FormData) { options.body = data; }
+
+        else { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(data); }
+
+    }
+
+    const res = await fetch(url, options);
+
+    const text = await res.text();
+
+    let json = null;
+
+    try { json = JSON.parse(text); } catch(e) { json = null; }
+
+    if (!res.ok) {
+
+        throw new Error((json && json.error) ? json.error : (text || 'HTTP '+res.status));
+
+    }
+
+    if (json === null) throw new Error('无效的服务器响应');
+
+    return json;
+
+}
+
+
+
+function showNotification(msg, type='success') {
+
+    const el = document.getElementById('notification');
+
+    el.textContent = (type==='success'?'✅ ':'❌ ') + msg;
+
+    el.className = 'notification ' + (type==='error'?'error':'success');
+
+    el.classList.remove('hidden');
+
+    setTimeout(()=>el.classList.add('hidden'), 3000);
+
+}
+
+
+
+function showLoading() {
+
+    document.getElementById('fileList').innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
+
+}
+
+
+
+function formatSize(b) {
+
+    if (!b && b!==0) return '';
+
+    if (b===0) return '0 B';
+
+    const u=['B','KB','MB','GB','TB'];
+
+    const i=Math.max(0,Math.min(u.length-1,Math.floor(Math.log(Math.max(b,1))/Math.log(1024))));
+
+    return (b/Math.pow(1024,i)).toFixed(1)+' '+u[i];
+
+}
+
+
+
+function getIcon(name, isDir) {
+
+    if (isDir) return '📁';
+
+    const ext = name.substring(name.lastIndexOf('.')).toLowerCase();
+
+    const icons = {
+        '.pdf':'📄','.doc':'📝','.docx':'📝','.xls':'📊','.xlsx':'📊','.ppt':'📑','.pptx':'📑',
+        '.jpg':'🖼️','.jpeg':'🖼️','.png':'🖼️','.gif':'🖼️','.bmp':'🖼️','.webp':'🖼️',
+        '.zip':'📦','.tar':'📦','.gz':'📦','.rar':'📦','.7z':'📦',
+        '.txt':'📄','.csv':'📄','.html':'🌐','.css':'🌐','.js':'🌐','.json':'🌐','.xml':'🌐',
+        '.py':'🐍','.sh':'💻','.md':'📝',
+        '.mp4':'🎬','.mp3':'🎵','.avi':'🎬','.mov':'🎬','.wmv':'🎬','.flv':'🎬','.webm':'🎬',
+        '.doc':'📝','.rtf':'📝'
+    };
+
+    return icons[ext] || '📄';
+
+}
+
+
+
+function escapeHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function escapeAttr(s) { return (s||'').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
+
+
+
+function loadPath(path) {
+
+    currentPath = path;
+
+    localStorage.setItem('webBrowserPath', path);
+
+    selectedItems = [];
+
+    showLoading();
+
+    api('GET', API+'/files?path='+encodeURIComponent(path))
+
+    .then(data => { renderBreadcrumb(data); renderFileList(data); updateStatus(data); })
+
+    .catch(e => {
+
+        const msg = (e && e.message) ? e.message : String(e);
+
+        if (msg.indexOf('密码') >= 0) {
+
+            // Cached password invalid/expired: force re-login
+
+            localStorage.removeItem('webBrowserPassword');
+
+            apiToken = '';
+
+            const modal = document.getElementById('passwordModal');
+
+            modal.classList.remove('hidden');
+
+            modal.style.display = '';
+
+            document.getElementById('passwordError').textContent = '登录已失效，请重新输入密码';
+
+            setTimeout(()=>document.getElementById('passwordInput').focus(), 50);
+
+            return;
+
+        }
+
+        document.getElementById('fileList').innerHTML = '<div class="loading">加载失败: '+escapeHtml(msg)+'</div>';
+
+        showNotification('加载失败: '+msg, 'error');
+
+    });
+
+}
+
+
+
+function refreshCurrent() { loadPath(currentPath); }
+
+function goUp() {
+
+    if (!currentPath) return;
+
+    const parts = currentPath.split('/').filter(Boolean);
+
+    if (parts.length<=1) return;
+
+    parts.pop();
+
+    loadPath('/'+parts.join('/'));
+
+}
+
+function navigate(path) { loadPath(path); }
+
+
+
+function renderBreadcrumb(data) {
+
+    const bc = document.getElementById('breadcrumb');
+
+    const root = data.root_path||'/';
+
+    const parts = currentPath.split('/').filter(Boolean);
+
+    let html = '<span class="breadcrumb-item" onclick="navigate(\'/\')">💻 根目录</span>';
+
+    let acc = '';
+
+    for (const p of parts) {
+
+        acc += '/'+p;
+
+        const active = acc===currentPath;
+
+        html += '<span class="breadcrumb-sep">›</span><span class="breadcrumb-item'+(active?' active':'')+'" onclick="navigate(\''+acc+'\')">'+escapeHtml(p)+'</span>';
+
+    }
+
+    bc.innerHTML = html;
+
+}
+
+
+
+function renderFileList(data) {
+
+    const fl = document.getElementById('fileList');
+
+    currentFileData = data;
+
+    if (viewMode==='grid') {
+
+        let html = '<div class="file-grid">';
+
+        if (data.files && data.files.length > 0) {
+
+            for (const f of data.files) {
+
+                const icon = getIcon(f.name, f.is_dir);
+
+                const sz = f.is_dir ? '' : formatSize(f.size);
+
+                html += `<div class="file-item" onclick="handleItemClick(event, '${escapeAttr(f.name)}', ${f.is_dir})" oncontextmenu="showContextMenu(event, '${escapeAttr(f.name)}', ${f.is_dir})">
+
+                    <div class="icon">${icon}</div>
+
+                    <div class="name" title="${escapeAttr(f.name)}">${escapeHtml(f.name)}</div>
+
+                    ${!f.is_dir?'<div class="size">'+formatSize(f.size)+'</div>':''}
+
+                </div>`;
+
+            }
+
+        } else {
+
+            html += '<div class="file-item" style="flex-direction:column;align-items:center;justify-content:center;opacity:0.5;padding:40px">';
+
+            html += '<div class="icon">📁</div>';
+
+            html += '<div class="name">空目录</div>';
+
+            html += '</div>';
+
+        }
+
+        html += '</div>';
+
+        fl.innerHTML = html;
+
+    } else {
+
+        let html = '<div class="list-header"><span>名称</span><span>大小</span><span>修改时间</span></div><div class="file-list-view">';
+
+        if (data.files && data.files.length > 0) {
+
+            for (const f of data.files) {
+
+                const icon = getIcon(f.name, f.is_dir);
+
+                const sz = f.is_dir ? '' : formatSize(f.size);
+
+                html += `<div class="file-list-item" onclick="handleItemClick(event, '${escapeAttr(f.name)}', ${f.is_dir})" oncontextmenu="showContextMenu(event, '${escapeAttr(f.name)}', ${f.is_dir})">
+
+                    <div class="icon">${icon}</div>
+
+                    <div class="name" title="${escapeAttr(f.name)}">${escapeHtml(f.name)}</div>
+
+                    <div class="size">${sz}</div>
+
+                    <div class="modified">${f.modified||''}</div>
+
+                </div>`;
+
+            }
+
+        } else {
+
+            html += '<div class="file-list-item" style="opacity:0.5;padding:40px;text-align:center">';
+
+            html += '<div class="icon">📁</div>';
+
+            html += '<div class="name">空目录</div>';
+
+            html += '</div>';
+
+        }
+
+        html += '</div>';
+
+        fl.innerHTML = html;
+
+    }
+
+}
+
+
+
+function updateStatus(data) {
+
+    const count = data.files ? data.files.length : 0;
+
+    document.getElementById('statusLeft').textContent = '当前路径: '+currentPath+' | 文件数: '+count;
+
+}
+
+
+function handleItemClick(e, name, isDir) {
+
+    e.preventDefault();;
+
+    e.stopPropagation();
+
+    // Multi-select with Ctrl
+
+    if (e.ctrlKey || e.shiftKey) {
+
+        toggleSelect(name);
+
+        return;
+
+    }
+
+    // Double-click to open/download
+
+    if (e.detail === 2) {
+
+        const item = currentFileData.files.find(f=>f.name===name);
+
+        if (!item) return;
+
+        if (item.is_dir) {
+
+            navigate(item.path);
+
+        } else {
+
+            downloadFile(item.path, item.name);
+
+        }
+
+        return;
+
+    }
+
+    // Single-click to select
+
+    // Clear previous selection
+
+    document.querySelectorAll('.file-item.selected, .file-list-item.selected').forEach(el=>el.classList.remove('selected'));
+
+    selectedItems = [name];
+
+    const container = e.currentTarget || e.target;
+
+    if (container && container.classList) container.classList.add('selected');
+
+}
+
+
+
+function toggleSelect(name) {
+
+    const idx = selectedItems.indexOf(name);
+
+    if (idx >= 0) { selectedItems.splice(idx, 1); }
+
+    else { selectedItems.push(name); }
+
+    document.querySelectorAll('.file-item, .file-list-item').forEach(el=>{
+
+        const nm = el.getAttribute('onclick')?.match(/\'([^\']+)\'/)?.[1];
+
+        el.classList.toggle('selected', selectedItems.includes(nm));
+
+    });
+
+}
+
+
+
+function showContextMenu(e, name, isDir) {
+
+    e.preventDefault();
+
+    e.stopPropagation();
+
+    // Select the right-clicked item so context actions target it
+
+    selectedItems = [name];
+
+    document.querySelectorAll('.file-item.selected, .file-list-item.selected').forEach(el=>el.classList.remove('selected'));
+
+    document.querySelectorAll('.file-item, .file-list-item').forEach(el=>{
+
+        const nm = el.getAttribute('onclick')?.match(/\'([^\']+)\'/)?.[1];
+
+        if (nm === name) el.classList.add('selected');
+
+    });
+
+    const cm = document.getElementById('contextMenu');
+
+    let html = '';
+
+    if (isDir) {
+
+        html += '<div class="context-menu-item" onclick="navigateCurrentPath()">'+name+' (打开)</div>';
+
+        html += '<div class="context-menu-sep"></div>';
+
+    } else {
+
+        html += '<div class="context-menu-item" onclick="downloadCurrentFile()">'+name+' (下载)</div>';
+
+        html += '<div class="context-menu-sep"></div>';
+
+    }
+
+    html += '<div class="context-menu-item" onclick="renameCurrent()">✏️ 重命名</div>';
+
+    html += '<div class="context-menu-item" onclick="copyCurrent()">📋 复制</div>';
+
+    html += '<div class="context-menu-item" onclick="cutCurrent()">✂️ 剪切</div>';
+
+    html += '<div class="context-menu-sep"></div>';
+
+    html += '<div class="context-menu-item" onclick="deleteCurrent()" style="color:var(--error)">🗑️ 删除</div>';
+
+    cm.innerHTML = html;
+
+    cm.style.left = e.clientX + 'px';
+
+    cm.style.top = e.clientY + 'px';
+
+    cm.classList.remove('hidden');
+
+    
+
+    setTimeout(()=>{
+
+        document.addEventListener('click', ()=>cm.classList.add('hidden'), {once:true});
+
+    }, 100);
+
+}
+
+
+
+function navigateCurrentPath() {
+
+    if (selectedItems.length > 0) {
+
+        const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+        if (f && f.is_dir) navigate(f.path);
+
+    }
+
+}
+
+function downloadCurrentFile() {
+
+    if (selectedItems.length > 0) {
+
+        const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+        if (f && !f.is_dir) downloadFile(f.path, f.name);
+
+    }
+
+}
+
+function renameCurrent() {
+
+    renameSelected();
+
+}
+
+
+
+function copyCurrent() {
+
+    if (selectedItems.length > 0) {
+
+        const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+        if (f) {
+
+            clipboard = { path: f.path, name: f.name, mode: 'copy' };
+
+            showNotification('已复制: '+f.name);
+
+        }
+
+    }
+
+}
+
+
+
+function cutCurrent() {
+
+    if (selectedItems.length > 0) {
+
+        const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+        if (f) {
+
+            clipboard = { path: f.path, name: f.name, mode: 'cut' };
+
+            showNotification('已剪切: '+f.name);
+
+        }
+
+    }
+
+}
+
+function deleteCurrent() {
+
+    if (selectedItems.length > 0) {
+
+        const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+        if (f) {
+
+            if (!confirm('确定删除 "'+f.name+'" ?')) return;
+
+            api('POST', API+'/delete', {path:f.path}).then(()=>{showNotification('已删除'); refreshCurrent();});
+
+        }
+
+    }
+
+}
+
+
+
+function setView(mode) {
+
+    viewMode = mode;
+
+    document.getElementById('gridBtn').classList.toggle('active', mode==='grid');
+
+    document.getElementById('listBtn').classList.toggle('active', mode==='list');
+
+    if (currentFileData) renderFileList(currentFileData);
+
+}
+
+
+
+// ===== UPLOAD =====
+
+function startUpload() {
+
+    document.getElementById('fileInput').click();
+
+}
+
+
+
+async function handleFileSelect(e) {
+
+    const files = e.target.files;
+
+    if (!files || files.length===0) return;
+
+    await uploadDrop(files);
+
+    e.target.value = '';
+
+}
+
+
+
+async function uploadDrop(files) {
+
+    if (!files || files.length === 0) return;
+
+    const total = files.length;
+
+    let done = 0;
+
+    let failed = 0;
+
+    showNotification('正在上传 '+total+' 个文件...');
+
+    for (const file of files) {
+
+        try {
+
+            const fd = new FormData();
+
+            fd.append('path', currentPath);
+
+            fd.append('file', file, file.name);
+
+            await api('POST', API+'/upload', fd);
+
+            done++;
+
+        } catch(err) {
+
+            failed++;
+
+            showNotification('上传 '+file.name+' 失败: '+err.message, 'error');
+
+        }
+
+    }
+
+    if (failed === 0) {
+
+        showNotification('全部上传完成 ('+done+'/'+total+')');
+
+    } else {
+
+        showNotification('上传完成: 成功 '+done+', 失败 '+failed, 'error');
+
+    }
+
+    loadPath(currentPath);
+
+}
+
+
+
+// Drag and drop
+
+document.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('dropZone').classList.add('active'); });
+
+document.addEventListener('dragleave', e => {
+
+    if (e.target.id !== 'dropZone') return;
+
+    document.getElementById('dropZone').classList.remove('active');
+
+});
+
+document.addEventListener('drop', e => {
+
+    e.preventDefault();
+
+    document.getElementById('dropZone').classList.remove('active');
+
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+
+        uploadDrop(e.dataTransfer.files);
+
+    }
+
+});
+
+
+
+// ===== FILE operations =====
+
+async function downloadFile(path, name) {
+
+    try {
+
+        // Direct browser download
+        const url = API+'/download?path='+encodeURIComponent(path)+'&password='+apiToken;
+
+        const a = document.createElement('a');
+
+        a.href = url;
+
+        a.download = name;
+
+        a.target = '_blank';
+
+        a.click();
+
+        showNotification('下载完成');
+
+    } catch(e) {
+
+        showNotification('下载失败: '+e, 'error');
+
+    }
+
+}
+
+
+
+async function newFolder() {
+
+    const name = prompt('输入文件夹名称:', '新文件夹');
+
+    if (!name) return;
+
+    await api('POST', API+'/mkdir', {path:currentPath, name:name});
+
+    showNotification('文件夹已创建');
+
+    refreshCurrent();
+
+}
+
+
+
+async function renameSelected() {
+
+    if (!currentFileData || selectedItems.length===0) { showNotification('请先选择文件', 'error'); return; }
+
+    const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+    if (!f) { showNotification('未找到选中的文件', 'error'); return; }
+
+    const newName = prompt('输入新名称:', f.name);
+
+    if (newName === null) return;
+
+    const trimmed = newName.trim();
+
+    if (!trimmed) { showNotification('名称不能为空', 'error'); return; }
+
+    if (trimmed === f.name) return;
+
+    if (trimmed.indexOf('/') >= 0 || trimmed.indexOf('\\') >= 0) { showNotification('名称不能包含斜杠', 'error'); return; }
+
+    try {
+
+        await api('POST', API+'/rename', {path:f.path, name:trimmed});
+
+        showNotification('重命名完成');
+
+        refreshCurrent();
+
+    } catch(e) {
+
+        showNotification('重命名失败: '+e.message, 'error');
+
+    }
+
+}
+
+
+
+async function deleteSelected() {
+
+    if (selectedItems.length===0) { showNotification('请先选择文件'); return; }
+
+    const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+    if (!f) return;
+
+    if (!confirm('确定删除 "'+f.name+'" ?')) return;
+
+    await api('POST', API+'/delete', {path:f.path});
+
+    showNotification('已删除');
+
+    refreshCurrent();
+
+}
+
+
+
+async function copySelected() {
+
+    if (!currentFileData || selectedItems.length===0) { showNotification('请先选择文件', 'error'); return; }
+
+    const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+    if (!f) { showNotification('未找到选中的文件', 'error'); return; }
+
+    clipboard = { path: f.path, name: f.name, mode: 'copy' };
+
+    showNotification('已复制: '+f.name);
+
+}
+
+
+
+async function cutSelected() {
+
+    if (!currentFileData || selectedItems.length===0) { showNotification('请先选择文件', 'error'); return; }
+
+    const f = currentFileData.files.find(x=>x.name===selectedItems[0]);
+
+    if (!f) { showNotification('未找到选中的文件', 'error'); return; }
+
+    clipboard = { path: f.path, name: f.name, mode: 'cut' };
+
+    showNotification('已剪切: '+f.name);
+
+}
+
+
+
+async function pasteSelected() {
+
+    if (!clipboard) { showNotification('剪贴板为空', 'error'); return; }
+
+    const endpoint = clipboard.mode === 'cut' ? '/move' : '/copy';
+
+    try {
+
+        await api('POST', API+endpoint, {source:clipboard.path, destination:currentPath});
+
+        showNotification(clipboard.mode === 'cut' ? '移动完成' : '粘贴完成');
+
+        if (clipboard.mode === 'cut') clipboard = null;
+
+        refreshCurrent();
+
+    } catch(e) {
+
+        showNotification('粘贴失败: '+e.message, 'error');
+
+    }
+
+}
+
+
+
+// ===== SEARCH =====
+
+async function performSearch() {
+
+    const kw = document.getElementById('searchInput').value.trim();
+
+    if (!kw) return;
+
+    try {
+
+        const data = await api('GET', API+'/search?path='+encodeURIComponent(currentPath)+'&keyword='+encodeURIComponent(kw)+'&depth=5');
+
+        if (data.results.length > 0) {
+
+            viewMode = 'list';
+
+            document.getElementById('gridBtn').classList.remove('active');
+
+            document.getElementById('listBtn').classList.add('active');
+
+            let html = '<div class="list-header"><span>名称</span><span>大小</span><span>路径</span></div><div class="file-list-view">';
+
+            for (const r of data.results) {
+
+                html += '<div class="file-list-item" onclick="navigate(\''+escapeAttr(r.path)+'\')" oncontextmenu="event.preventDefault()">';
+
+                html += '<div class="icon">'+getIcon(r.name, r.is_dir)+'</div>';
+
+                html += '<div class="name" title="'+escapeAttr(r.name)+'">'+escapeHtml(r.name)+'</div>';
+
+                html += '<div class="size">'+formatSize(r.size)+'</div>';
+
+                html += '<div class="modified" style="flex:1;min-width:200px;color:var(--text2)">'+r.path+'</div>';
+
+                html += '</div>';
+
+            }
+
+            html += '</div>';
+
+            document.getElementById('fileList').innerHTML = html;
+
+            document.getElementById('statusLeft').textContent = '搜索结果: '+data.results.length+' 个匹配';
+
+        } else {
+
+            showNotification('未找到匹配文件');
+
+            loadPath(currentPath);
+
+        }
+
+    } catch(e) { showNotification('搜索失败: '+e, 'error'); }
+
+}
+
+
+
+// ===== SIDEBAR =====
+
+async function loadSidebar() {
+
+    try {
+
+        const data = await api('GET', API+'/files?path=/');
+
+        const sb = document.getElementById('sidebar');
+
+        let html = '<div class="sidebar-section"><div class="sidebar-section-title">快速访问</div>';
+
+        html += '<div class="sidebar-item" onclick="navigate(\'/\')">&#x1F4BB; 根目录</div>';
+
+        
+
+        // Add common directories
+
+        const commonDirs = ['/home', '/tmp', '/var/log', '/etc', '/usr', '/opt', '/root'];
+
+        for (const d of commonDirs) {
+
+            try {
+
+                const st = await api('GET', API+'/info?path='+encodeURIComponent(d));
+
+                if (!st.error && st.is_dir) {
+
+                    html += '<div class="sidebar-item" onclick="navigate(\''+d+'\')">'+getIcon(d, true)+' '+d+'</div>';
+
+                }
+
+            } catch(e) {}
+
+        }
+
+        html += '</div>';
+
+        
+
+        // Disk usage
+
+        try {
+
+            const usage = await api('GET', API+'/usage');
+
+            html += '<div class="sidebar-section"><div class="sidebar-section-title">磁盘空间</div>';
+
+            html += '<div class="sidebar-item" style="flex-direction:column;align-items:flex-start;gap:4px;padding:4px 16px">';
+
+            html += '<span style="font-size:11px">总空间: '+usage.total_human+'</span>';
+
+            html += '<span style="font-size:11px">已用: '+usage.used_human+'</span>';
+
+            html += '<span style="font-size:11px;color:var(--success)">可用: '+usage.free_human+'</span>';
+
+            html += '</div></div>';
+
+        } catch(e) {}
+
+        
+
+        sb.innerHTML = html;
+
+    } catch(e) {}
+
+}
+
+
+
+// Keyboard shortcuts
+
+document.addEventListener('keydown', e => {
+
+    if (e.ctrlKey && e.key==='f') { e.preventDefault(); document.getElementById('searchInput').focus(); }
+
+    if (e.key==='F5') { e.preventDefault(); refreshCurrent(); }
+
+    if (e.key==='Escape') { document.getElementById('contextMenu').classList.add('hidden'); }
+
+});
+
+
+
+</script>
+</body>
+</html>
