@@ -17,6 +17,25 @@ set -u
 # 解析脚本所在目录，使项目可任意放置。
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Load configuration from .env if present, so settings persist across restarts.
+# 若存在 .env 则从其中加载配置，使设置可跨重启保留。
+# Existing environment variables always take precedence.
+# 已存在的环境变量优先级更高。
+if [ -f "$APP_DIR/.env" ]; then
+    while IFS='=' read -r key value; do
+        case "$key" in
+            ''|'#'*) continue ;;
+        esac
+        key="$(echo "$key" | tr -d '[:space:]')"
+        # strip surrounding quotes from the value
+        value="$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+        # do not override variables already set in the environment
+        if [ -z "${!key:-}" ]; then
+            export "$key=$value"
+        fi
+    done < "$APP_DIR/.env"
+fi
+
 LOG_FILE="${WEB_FILE_BROWSER_LOG:-/tmp/webfile_browser.log}"
 PID_FILE="${WEB_FILE_BROWSER_PID:-/tmp/webfile_browser.pid}"
 PORT="${WEB_FILE_BROWSER_PORT:-3801}"

@@ -100,6 +100,36 @@ All configuration is via environment variables — no secrets in the source code
 >
 > ⚠️ **对外提供服务前请务必修改默认密码。**
 
+### Using a `.env` file / 使用 `.env` 配置文件
+
+`run_web.sh` automatically loads a `.env` file next to it, so settings persist across restarts.
+Copy the template and edit it / `run_web.sh` 会自动加载同目录下的 `.env`，使配置可跨重启保留：
+
+```bash
+cp .env.example .env
+$EDITOR .env
+./run_web.sh restart
+```
+
+```ini
+WEB_FILE_BROWSER_ROOT=/data/myfolder
+WEB_FILE_BROWSER_PASSWORD=your-strong-password
+WEB_FILE_BROWSER_PORT=3801
+```
+
+Precedence / 优先级：**shell environment > `.env` > built-in defaults**
+（shell 环境变量 > `.env` > 内置默认值）。`.env` is gitignored — never commit it.
+
+When `python3 app.py` is run directly (not via `run_web.sh`), export the variables yourself:
+若直接运行 `python3 app.py`（不经过 `run_web.sh`），需自行导出环境变量。
+
+> **Browsing is confined to `WEB_FILE_BROWSER_ROOT`.** The UI adapts to whatever root the
+> server reports: breadcrumbs, the sidebar and the "up" button all stay inside it, and any
+> cached path outside it is discarded automatically.
+>
+> **浏览范围严格限制在 `WEB_FILE_BROWSER_ROOT` 之内。** 前端会自适应服务端返回的根目录：
+> 面包屑、侧边栏与"上级"按钮均不会超出该目录，失效的缓存路径会被自动丢弃。
+
 ---
 
 ## Usage / 使用方法
@@ -118,6 +148,12 @@ Then open <http://localhost:3801> / 然后打开 <http://localhost:3801>。
 ### With the management script / 使用管理脚本
 
 ```bash
+# Option A: use a .env file (recommended, persists across restarts)
+# 方式 A：使用 .env 文件（推荐，重启后仍生效）
+cp .env.example .env && $EDITOR .env
+./run_web.sh start
+
+# Option B: export variables in the current shell / 方式 B：在当前 shell 导出变量
 export WEB_FILE_BROWSER_ROOT=/data/myfolder
 export WEB_FILE_BROWSER_PASSWORD='your-strong-password'
 
@@ -127,9 +163,9 @@ export WEB_FILE_BROWSER_PASSWORD='your-strong-password'
 ./run_web.sh stop      # stop    / 停止
 ```
 
-The script is portable (resolves its own directory) and installs missing dependencies
-automatically. Logs go to `/tmp/webfile_browser.log`.
-脚本可任意放置（自动解析自身目录），并会自动安装缺失依赖。日志位于 `/tmp/webfile_browser.log`。
+The script is portable (resolves its own directory), loads `.env` if present, and installs missing
+dependencies automatically. Logs go to `/tmp/webfile_browser.log`.
+脚本可任意放置（自动解析自身目录），会加载 `.env`，并自动安装缺失依赖。日志位于 `/tmp/webfile_browser.log`。
 
 ### Run as a systemd service (optional) / 注册为 systemd 服务（可选）
 
