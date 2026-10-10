@@ -139,7 +139,7 @@ body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:var(--bg);co
 
 const API = '/api';
 
-let currentPath = '', selectedItems = [], viewMode = 'grid', clipboard = null, apiToken = '', currentFileData = null;
+let currentPath = '', selectedItems = [], viewMode = 'grid', clipboard = null, apiToken = '', currentFileData = null, rootPath = '';
 
 
 
@@ -181,7 +181,7 @@ function checkPassword() {
 
             modal.style.display = '';
 
-            const initialPath = localStorage.getItem('webBrowserPath') || '/data/myfolder';
+            const initialPath = localStorage.getItem('webBrowserPath') || '';
 
             loadPath(initialPath);
 
@@ -214,7 +214,7 @@ window.addEventListener('load', function() {
         apiToken = pw;
 
         // Load path and files directly
-        const initialPath = localStorage.getItem('webBrowserPath') || '/data/myfolder';
+        const initialPath = localStorage.getItem('webBrowserPath') || '';
 
         loadPath(initialPath);
 
@@ -349,17 +349,33 @@ function escapeAttr(s) { return (s||'').replace(/'/g,'&#39;').replace(/"/g,'&quo
 
 function loadPath(path) {
 
-    currentPath = path;
-
-    localStorage.setItem('webBrowserPath', path);
+    const target = path || '';
 
     selectedItems = [];
 
     showLoading();
 
-    api('GET', API+'/files?path='+encodeURIComponent(path))
+    const url = target
 
-    .then(data => { renderBreadcrumb(data); renderFileList(data); updateStatus(data); })
+        ? API+'/files?path='+encodeURIComponent(target)
+
+        : API+'/files';
+
+    api('GET', url)
+
+    .then(data => {
+
+        // Track the server-side root so navigation stays inside it
+
+        if (data.root_path) rootPath = data.root_path;
+
+        currentPath = data.current_path || target;
+
+        localStorage.setItem('webBrowserPath', currentPath);
+
+        renderBreadcrumb(data); renderFileList(data); updateStatus(data);
+
+    })
 
     .catch(e => {
 
@@ -387,6 +403,36 @@ function loadPath(path) {
 
         }
 
+        // Stale cached path (e.g. root changed, or path was removed):
+
+        // fall back to the server root instead of dead-ending.
+
+        if (msg.indexOf('路径越界') >= 0 || msg.indexOf('路径不存在') >= 0) {
+
+            localStorage.removeItem('webBrowserPath');
+
+            if (target && target !== rootPath) {
+
+                showNotification('路径无效，已返回根目录', 'error');
+
+                loadPath(rootPath || '');
+
+                return;
+
+            }
+
+            // Root itself is invalid and no explicit path: ask server for its default
+
+            if (target) {
+
+                loadPath('');
+
+                return;
+
+            }
+
+        }
+
         document.getElementById('fileList').innerHTML = '<div class="loading">加载失败: '+escapeHtml(msg)+'</div>';
 
         showNotification('加载失败: '+msg, 'error');
@@ -403,13 +449,25 @@ function goUp() {
 
     if (!currentPath) return;
 
-    const parts = currentPath.split('/').filter(Boolean);
+    // Already at the configured root: nothing above it
 
-    if (parts.length<=1) return;
+    if (rootPath && currentPath === rootPath) return;
 
-    parts.pop();
+    let parent = currentPath.substring(0, currentPath.lastIndexOf('/'));
 
-    loadPath('/'+parts.join('/'));
+    if (!parent) parent = '/';
+
+    // Never navigate above the configured root
+
+    if (rootPath && parent !== rootPath && !parent.startsWith(rootPath + '/')) {
+
+        loadPath(rootPath);
+
+        return;
+
+    }
+
+    loadPath(parent);
 
 }
 
@@ -421,13 +479,23 @@ function renderBreadcrumb(data) {
 
     const bc = document.getElementById('breadcrumb');
 
-    const root = data.root_path||'/';
+    if (data.root_path) rootPath = data.root_path;
 
-    const parts = currentPath.split('/').filter(Boolean);
+    const root = rootPath;
 
-    let html = '<span class="breadcrumb-item" onclick="navigate(\'/\')">💻 根目录</span>';
+    const rootName = root.split('/').filter(Boolean).pop() || '/';
 
-    let acc = '';
+    let html = '<span class="breadcrumb-item" onclick="navigate(\''+escapeAttr(root)+'\')">💻 '+escapeHtml(rootName)+'</span>';
+
+    // Show only the path relative to the configured root
+
+    let rel = currentPath;
+
+    if (root && rel.indexOf(root) === 0) rel = rel.slice(root.length);
+
+    const parts = rel.split('/').filter(Boolean);
+
+    let acc = root;
 
     for (const p of parts) {
 
@@ -435,7 +503,7 @@ function renderBreadcrumb(data) {
 
         const active = acc===currentPath;
 
-        html += '<span class="breadcrumb-sep">›</span><span class="breadcrumb-item'+(active?' active':'')+'" onclick="navigate(\''+acc+'\')">'+escapeHtml(p)+'</span>';
+        html += '<span class="breadcrumb-sep">›</span><span class="breadcrumb-item'+(active?' active':'')+'" onclick="navigate(\''+escapeAttr(acc)+'\')">'+escapeHtml(p)+'</span>';
 
     }
 
@@ -1123,41 +1191,35 @@ async function performSearch() {
 
 async function loadSidebar() {
 
+    const sb = document.getElementById('sidebar');
+
     try {
 
-        const data = await api('GET', API+'/files?path=/');
+        // Ask the server for its configured root (empty path = default root)
 
-        const sb = document.getElementById('sidebar');
+        const data = await api('GET', API+'/files');
+
+        if (data.root_path) rootPath = data.root_path;
+
+        const root = data.root_path || data.current_path || '/';
+
+        const rootName = root.split('/').filter(Boolean).pop() || '/';
 
         let html = '<div class="sidebar-section"><div class="sidebar-section-title">快速访问</div>';
 
-        html += '<div class="sidebar-item" onclick="navigate(\'/\')">&#x1F4BB; 根目录</div>';
+        html += '<div class="sidebar-item" onclick="navigate(\''+escapeAttr(root)+'\')">&#x1F4BB; '+escapeHtml(rootName)+'</div>';
 
-        
+        // List the root's own sub-directories as shortcuts
 
-        // Add common directories
+        for (const f of (data.files || [])) {
 
-        const commonDirs = ['/home', '/tmp', '/var/log', '/etc', '/usr', '/opt', '/root'];
+            if (!f.is_dir) continue;
 
-        for (const d of commonDirs) {
-
-            try {
-
-                const st = await api('GET', API+'/info?path='+encodeURIComponent(d));
-
-                if (!st.error && st.is_dir) {
-
-                    html += '<div class="sidebar-item" onclick="navigate(\''+d+'\')">'+getIcon(d, true)+' '+d+'</div>';
-
-                }
-
-            } catch(e) {}
+            html += '<div class="sidebar-item" onclick="navigate(\''+escapeAttr(f.path)+'\')">'+getIcon(f.name, true)+' '+escapeHtml(f.name)+'</div>';
 
         }
 
         html += '</div>';
-
-        
 
         // Disk usage
 
@@ -1179,11 +1241,13 @@ async function loadSidebar() {
 
         } catch(e) {}
 
-        
-
         sb.innerHTML = html;
 
-    } catch(e) {}
+    } catch(e) {
+
+        sb.innerHTML = '<div class="sidebar-section"><div class="sidebar-section-title">快速访问</div><div class="sidebar-item">侧边栏加载失败</div></div>';
+
+    }
 
 }
 
